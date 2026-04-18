@@ -14,8 +14,8 @@ htmlcov/
 config/mode.yaml                # copié depuis mode.example.yaml, non versionné
 
 # --- Données runtime (persistées sous data/, jamais commit) ------------------
-data/
-!data/.gitkeep                  # garde le dossier dans git sans son contenu
+/data/
+!/data/.gitkeep                 # garde le dossier dans git sans son contenu
 
 # --- Déploiement -------------------------------------------------------------
 .deployment.lock                # flock partagé deploy.sh ↔ auto-update.sh
