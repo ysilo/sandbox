@@ -51,6 +51,13 @@ class SchedulerHandle:
         self.scheduler.start()   # type: ignore[attr-defined]
 
     def shutdown(self, *, wait: bool = True) -> None:
+        # `running` est présent sur tous les schedulers APScheduler ; si le
+        # handle a été construit puis jamais start() — cas typique du
+        # `--smoke` test — shutdown() lève `SchedulerNotRunningError`. On
+        # évite le bruit en court-circuitant.
+        running = bool(getattr(self.scheduler, "running", False))
+        if not running:
+            return
         try:
             self.scheduler.shutdown(wait=wait)   # type: ignore[attr-defined]
         except Exception:
