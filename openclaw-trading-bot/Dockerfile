@@ -116,4 +116,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 
 # tini = PID 1 → signaux propres vers APScheduler / FastAPI au shutdown
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["python", "-m", "src.orchestrator.run", "--serve", "--port", "8080"]
+CMD ["python", "-m", "src.main", "--serve", "--host", "0.0.0.0", "--port", "8080"]
