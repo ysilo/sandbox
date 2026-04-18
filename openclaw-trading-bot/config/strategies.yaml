@@ -1,0 +1,171 @@
+# =============================================================================
+# config/strategies.yaml — 7 stratégies de trading (§6 TRADING_BOT_ARCHITECTURE.md)
+#
+# Chaque entrée sous `strategies:` est validée au startup contre
+# `src.contracts.skills.StrategyConfig` (cf. src/utils/config_loader.py).
+#
+# Stade V1 : squelette minimal qui PARSE + VALIDE Pydantic. Les conditions
+# d'entrée fines par stratégie (§6.1–6.7) sont enrichies dans Phase 8
+# pendant l'implémentation de chaque `src/strategies/<id>.py`.
+#
+# L'ancien strategies.yaml (schéma pré-contrat, non compatible Pydantic) est
+# archivé sous `_legacy/config/strategies.yaml.pre-schema` pour référence.
+# =============================================================================
+
+active:
+  - ichimoku_trend_following
+  - breakout_momentum
+  - mean_reversion
+  - divergence_hunter
+  - volume_profile_scalp
+  - event_driven_macro
+  - news_driven_momentum
+
+defaults:
+  requires_ichimoku_alignment: true
+
+default_weights:
+  ichimoku: 0.40
+  trend:    0.25
+  momentum: 0.20
+  volume:   0.10
+  news:     0.05
+
+# -----------------------------------------------------------------------------
+# Stratégies — schéma StrategyConfig (§8.8.1) :
+#   id (auto), enabled, requires_ichimoku_alignment, max_risk_pct_equity,
+#   min_rr, min_composite_score, coef_self_improve, entry{}, exit{…},
+#   timeframes[]
+#
+# `entry` accepte dict[str, float|bool|str] — valeurs typées par stratégie,
+# relues par build_proposal() dans Phase 8.
+# `exit.tp_rule` ∈ {kijun, tenkan, hvn, r_multiple}
+# `exit.trailing` ∈ {chikou, kijun, atr, null}
+# -----------------------------------------------------------------------------
+strategies:
+
+  ichimoku_trend_following:
+    enabled: true
+    requires_ichimoku_alignment: true
+    max_risk_pct_equity: 0.010
+    min_rr: 2.0
+    min_composite_score: 0.82
+    coef_self_improve: 1.0
+    entry:
+      price_above_kumo:       true
+      tenkan_crosses_kijun:   true
+      chikou_confirms:        true
+      adx_min:                25
+    exit:
+      atr_stop_mult: 1.5
+      tp_rule:       "kijun"
+      tp_r_multiples: [1.5, 3.0]
+      trailing:      "kijun"
+    timeframes: ["4h", "1d"]
+
+  breakout_momentum:
+    enabled: true
+    requires_ichimoku_alignment: true
+    max_risk_pct_equity: 0.010
+    min_rr: 2.0
+    min_composite_score: 0.80
+    coef_self_improve: 1.0
+    entry:
+      donchian_breakout: true
+      atr_mult_breakout: 1.0
+      volume_ratio_min:  1.8
+    exit:
+      atr_stop_mult: 2.0
+      tp_rule:       "r_multiple"
+      tp_r_multiples: [2.0, 4.0]
+      trailing:      "atr"
+    timeframes: ["4h"]
+
+  mean_reversion:
+    enabled: true
+    requires_ichimoku_alignment: false
+    max_risk_pct_equity: 0.008
+    min_rr: 1.5
+    min_composite_score: 0.80
+    coef_self_improve: 1.0
+    entry:
+      bb_pct_b_oversold:  0.10
+      rsi_14_oversold:    25
+      range_structure:    true
+    exit:
+      atr_stop_mult: 1.2
+      tp_rule:       "tenkan"
+      tp_r_multiples: [1.5, 2.5]
+      trailing:       null
+    timeframes: ["1h"]
+
+  divergence_hunter:
+    enabled: true
+    requires_ichimoku_alignment: false
+    max_risk_pct_equity: 0.010
+    min_rr: 2.0
+    min_composite_score: 0.70
+    coef_self_improve: 1.0
+    entry:
+      divergence_rsi:   true
+      divergence_macd:  false
+      min_swing_pct:    1.5
+    exit:
+      atr_stop_mult: 1.8
+      tp_rule:       "r_multiple"
+      tp_r_multiples: [2.0, 3.0]
+      trailing:      "chikou"
+    timeframes: ["4h"]
+
+  volume_profile_scalp:
+    enabled: true
+    requires_ichimoku_alignment: false
+    max_risk_pct_equity: 0.006
+    min_rr: 1.5
+    min_composite_score: 0.70
+    coef_self_improve: 1.0
+    entry:
+      hvn_rejection:     true
+      vwap_proximity_pct: 0.30
+    exit:
+      atr_stop_mult: 1.0
+      tp_rule:       "hvn"
+      tp_r_multiples: [1.5, 2.0]
+      trailing:       null
+    timeframes: ["1h"]
+
+  event_driven_macro:
+    enabled: true
+    requires_ichimoku_alignment: true
+    max_risk_pct_equity: 0.008
+    min_rr: 2.0
+    min_composite_score: 0.77
+    coef_self_improve: 1.0
+    entry:
+      post_event_minutes: 15
+      reaction_atr_mult:  1.5
+      event_tags:         "fomc,ecb_meeting,cpi_us,nfp"
+    exit:
+      atr_stop_mult: 1.8
+      tp_rule:       "r_multiple"
+      tp_r_multiples: [1.5, 3.0]
+      trailing:      "atr"
+    timeframes: ["1h"]
+
+  news_driven_momentum:
+    enabled: true
+    requires_ichimoku_alignment: true
+    max_risk_pct_equity: 0.008
+    min_rr: 2.0
+    min_composite_score: 0.79
+    coef_self_improve: 1.0
+    entry:
+      news_impact_min:    0.70
+      news_sentiment_abs: 0.50
+      window_minutes:     45
+    exit:
+      atr_stop_mult: 1.5
+      tp_rule:       "r_multiple"
+      tp_r_multiples: [1.5, 3.0]
+      trailing:      "atr"
+    timeframes: ["1h"]

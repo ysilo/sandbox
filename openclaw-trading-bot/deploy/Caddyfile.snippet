@@ -1,0 +1,24 @@
+# =============================================================================
+# Caddy — bloc à APPEND au Caddyfile existant sur le VPS.
+#
+# Caddy tourne sur l'HÔTE (pas dans le compose openclaw-trading-bot). Le
+# service trading-bot publie son port sur 127.0.0.1:8080 (cf. docker-compose
+# `ports: "127.0.0.1:8080:8080"`) — Caddy reverse-proxy directement sur ce
+# point d'entrée. Plus stable que de cibler l'IP container (172.x.y.z) qui
+# change à chaque recréation.
+#
+# Après édition du Caddyfile :
+#   caddy validate --config /etc/caddy/Caddyfile
+#   systemctl reload caddy
+#
+# Authentification : gérée côté app FastAPI via DASHBOARD_BASIC_AUTH_USER /
+# DASHBOARD_BASIC_AUTH_PASS dans .env (voir src/api/auth.py). Pas de
+# basic_auth côté Caddy — un seul endroit pour changer le mot de passe.
+#
+# Webhook Telegram : protégé par header `X-Telegram-Bot-Api-Secret-Token`
+# comparé à TELEGRAM_WEBHOOK_SECRET côté app (src/telegram/webhook.py).
+# =============================================================================
+
+openclaw-bot.easy-flow.site {
+    reverse_proxy 127.0.0.1:8080
+}

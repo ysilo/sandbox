@@ -1,0 +1,38 @@
+# =============================================================================
+# systemd timer — openclaw-trading-bot auto-update
+# -----------------------------------------------------------------------------
+# Déclenche openclaw-auto-update.service 1 fois par jour à 04:00 UTC
+# (fenêtre calme : Asie fermée, US pas encore ouvert) + 2 min après le boot.
+# Persistent=true → si le VPS était down au moment prévu, la tâche tourne
+# au redémarrage.
+#
+# Pourquoi 1×/jour (vs 15 min dans les premières versions) :
+#   - On push rarement, une fenêtre quotidienne suffit
+#   - Laisse le cycle pre-US + post-close tourner tranquille sans restart
+#     intempestif en plein milieu d'un fetch marché
+#   - En cas d'urgence (hotfix), déclenchement manuel :
+#       sudo systemctl start openclaw-auto-update.service
+#     ou simplement `./deploy.sh` sur l'hôte.
+#
+# AccuracySec=1min → jitter inférieur à 1 min autour du tick.
+# RandomizedDelaySec=5min → évite de frapper pile à 04:00:00.
+# =============================================================================
+
+[Unit]
+Description=Timer — openclaw-trading-bot auto-update (daily 04:00 UTC)
+Requires=openclaw-auto-update.service
+
+[Timer]
+# Premier trigger 2 min après le boot (laisser Docker démarrer proprement)
+OnBootSec=2min
+# Ensuite 1 fois par jour à 04:00 UTC
+OnCalendar=*-*-* 04:00:00
+# Si le système était off, rattrape au prochain boot
+Persistent=true
+# Jitter pour éviter que plusieurs timers frappent à la même seconde
+AccuracySec=1min
+RandomizedDelaySec=5min
+Unit=openclaw-auto-update.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,14 @@
+# -----------------------------------------------------------------------------
+# ARTEFACT GÉNÉRÉ — ne pas éditer à la main.
+#
+# Source de vérité : pyproject.toml (§17.7 du doc d'archi).
+# Régénération :
+#     uv export --format requirements-txt --no-dev --no-hashes -o requirements.txt
+#
+# Ce fichier reste versionné pour :
+#   - compat outils externes (Dependabot, Snyk, Trivy, scanners SBOM)
+#   - fallback pip si uv indisponible sur un environnement
+#
+# La vraie lockfile reproductible est `uv.lock` (engagée dans git, §17.7).
+# -----------------------------------------------------------------------------
+# Ce stub sera écrasé par le premier `uv export` — voir QUICKSTART.md.

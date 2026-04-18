@@ -1,0 +1,65 @@
+# =============================================================================
+# config/pricing.yaml — tarifs consommés par le tracker de coûts (§14.3.3)
+#
+# Utilisé par src/memory/usage.py pour calculer le coût USD de chaque cycle
+# (modèles LLM) et des quotas API. Alimente le panel "Coûts" du dashboard.
+#
+# Mise à jour :
+#   - Relire au démarrage ; warning si `last_updated` est > 90 jours.
+#   - Source officielle Anthropic : https://docs.claude.com/en/docs/about-claude/models
+#   - Prix en USD. Modèle = $ / 1 M tokens (input & output séparés).
+#
+# IMPORTANT — noms de clés exactement alignés avec OPENCLAW_MODEL /
+# OPENCLAW_MODEL_IMPROVE (.env.example) pour un lookup direct par l'agent.
+# =============================================================================
+
+models:
+  claude-sonnet-4-6:
+    input_per_mtok_usd:  3.00
+    output_per_mtok_usd: 15.00
+  claude-opus-4-7:
+    # Aligné avec OPENCLAW_MODEL_IMPROVE (.env.example). Modèle courant
+    # self-improve + archi-review.
+    input_per_mtok_usd:  15.00
+    output_per_mtok_usd: 75.00
+  claude-opus-4-6:
+    # Legacy — conservé pour lookup rétroactif des runs antérieurs à
+    # la bascule 4-6 → 4-7. Prix identiques.
+    input_per_mtok_usd:  15.00
+    output_per_mtok_usd: 75.00
+  claude-haiku-4-5:
+    input_per_mtok_usd:  1.00
+    output_per_mtok_usd: 5.00
+
+apis:
+  # Providers payants — coût/call si dépassement du plan gratuit.
+  finnhub:
+    free_quota_per_min: 60
+    cost_per_call_usd: 0.0              # plan gratuit ; 0 tant que quota ok
+  newsapi:
+    free_quota_per_day: 100
+    cost_per_call_usd: 0.0
+  tradingeconomics:
+    free_quota_per_day: 500
+    cost_per_call_usd: 0.0
+  coingecko:
+    free_quota_per_month: 10000
+    cost_per_call_usd: 0.0
+  coinmarketcap:
+    free_quota_per_day: 10000
+    cost_per_call_usd: 0.0
+  fred:
+    free_quota_per_min: 120
+    cost_per_call_usd: 0.0
+
+  # Gratuits / sans clé — coût = infra hôte seulement.
+  yahoo_finance:        { cost_per_call_usd: 0.0, notes: "yfinance lib" }
+  kraken_public:        { cost_per_call_usd: 0.0, notes: "pas de clé pour endpoints publics" }
+  binance_public:       { cost_per_call_usd: 0.0, notes: "testnet ou endpoints publics" }
+  world_bank:           { cost_per_call_usd: 0.0, notes: "API publique" }
+  oecd:                 { cost_per_call_usd: 0.0, notes: "API publique" }
+  eurostat:             { cost_per_call_usd: 0.0, notes: "API publique" }
+  boursorama:           { cost_per_call_usd: 0.0, notes: "scraping, coût = infra" }
+
+last_updated: "2026-04-17"
+source: "https://docs.claude.com/en/docs/about-claude/models"

@@ -1,0 +1,55 @@
+# config/schedules.yaml — APScheduler (§15.1)
+#
+# Règle — pas de rapports le weekend pour les Actions (Euronext / US) ni
+# pour le Forex : ces marchés sont fermés du vendredi ~22:00 UTC au
+# dimanche ~22:00 UTC. Les cycles `full_cycle` / `full_cycle_with_journal`
+# sont donc contraints à `* * * * 1-5` (lundi → vendredi). Seul le
+# pipeline crypto tourne 24/7.
+
+cycles:
+  # --- Actions + Forex — jours ouvrés UNIQUEMENT (lun-ven) ----------------
+  - name: open_europe
+    cron: "0 7 * * 1-5"                  # 07:00 UTC — ouverture Euronext + Forex majors
+    pipeline: full_cycle
+    markets: [forex, equity]
+
+  - name: close_us
+    cron: "0 21 * * 1-5"                 # 21:00 UTC — post clôture US, avec journal
+    pipeline: full_cycle_with_journal
+    markets: [forex, equity]
+
+  # --- Crypto — 24/7 ------------------------------------------------------
+  - name: crypto_6h
+    cron: "0 */6 * * *"
+    pipeline: crypto_quick_scan
+    markets: [crypto]
+
+news_watcher:
+  enabled: true
+  poll_seconds: 60
+  impact_threshold_candidate: 0.60
+  impact_threshold_adhoc: 0.80
+  adhoc_cooldown_minutes: 15
+  adhoc_pipeline: focused_cycle
+  max_adhoc_per_day: 6
+
+maintenance:
+  - name: pnl_update
+    cron: "*/30 * * * *"
+    pipeline: update_open_trades
+
+  - name: memory_consolidate
+    cron: "30 2 * * *"
+    pipeline: memory_consolidate
+
+  - name: self_improve
+    cron: "0 22 * * 0"
+    pipeline: self_improve_weekly
+
+  - name: architecture_review
+    cron: "0 18 1 * *"
+    pipeline: architecture_review_monthly
+
+  - name: purge_telemetry
+    cron: "15 2 * * *"
+    pipeline: purge_telemetry

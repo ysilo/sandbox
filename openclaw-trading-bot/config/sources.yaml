@@ -1,0 +1,237 @@
+# ==================================================================
+# Sources de données V1
+# ------------------------------------------------------------------
+# Principe : fail-closed. Si toutes les sources d'une catégorie
+# échouent, le DataFetcher lève DataUnavailableError et le cycle
+# n'émet aucune proposition (§2.2).
+# ==================================================================
+
+# ------------------------------------------------------------------
+# Prix OHLCV
+# ------------------------------------------------------------------
+# Stratégie crypto : ccxt d'abord (normalisation commune, 3 exchanges),
+# puis Kraken REST natif pour les paires mal servies par l'adapter ccxt
+# (meilleure granularité historique sur certaines majors), puis
+# CoinGecko (prix + mcap, bon pour backfill long), enfin CoinMarketCap
+# pour dominance BTC/ETH et classements — pas pour l'OHLCV fin.
+# ------------------------------------------------------------------
+prices:
+  crypto:
+    provider: ccxt
+    exchanges: [binance, kraken, bybit]
+    fallbacks:
+      - kraken_rest           # REST natif Kraken — hors ccxt
+      - coingecko_api         # prix + mcap, rate-limit doux
+      - coinmarketcap_api     # dernier recours, usage mcap / dominance surtout
+  forex:
+    provider: oanda
+    fallback: exchangerate_host
+  equities:
+    provider: alpaca
+    fallback: yfinance
+
+# ------------------------------------------------------------------
+# Endpoints détaillés des providers crypto
+# ------------------------------------------------------------------
+crypto_providers:
+
+  # CoinGecko — free tier (~30 appels/min, pas de clé requise) ; clé Demo
+  # optionnelle pour 10k req/mois. Utilisé pour : backfill historique,
+  # market cap, dominance, trending, global metrics.
+  coingecko_api:
+    base_url: "https://api.coingecko.com/api/v3"
+    api_key: ${COINGECKO_DEMO_KEY}     # optionnel — 10k req/mois avec clé Demo
+    endpoints:
+      ohlc:         "/coins/{id}/ohlc"                      # max 365 j, granularités 1/7/14/30/90/180/365
+      market_chart: "/coins/{id}/market_chart"              # prix + mcap + volume time series
+      markets:      "/coins/markets"                        # top N par mcap
+      global:       "/global"                               # dominance BTC/ETH, mcap totale
+      trending:     "/search/trending"                      # top 7 narratives 24 h
+    poll_seconds:
+      markets:  600                    # top movers toutes les 10 min
+      global:   900
+      trending: 1800
+    tags: [crypto, aggregate, mcap, dominance]
+
+  # Kraken REST — utilisé en complément de ccxt, notamment pour :
+  #  - OHLC granularité 1m sur 720 bougies (plus que ccxt default)
+  #  - Spread & Depth pour qualifier la liquidité avant un trade
+  #  - Ticker multi-paires en 1 seul appel (moins de quota)
+  kraken_rest:
+    base_url: "https://api.kraken.com/0/public"
+    endpoints:
+      ohlc:        "/OHLC"                                   # interval=1,5,15,30,60,240,1440,10080,21600
+      ticker:      "/Ticker"
+      depth:       "/Depth"                                  # carnet d'ordres (count=100 max)
+      spread:      "/Spread"
+      asset_pairs: "/AssetPairs"
+    rate_limit_per_sec: 1              # prudent : Kraken autorise 15-20 req/s sur le tier public
+    tags: [crypto, exchange, liquidity]
+
+  # CoinMarketCap — free Basic tier : 10 000 credits/mois (~333/j).
+  # Utilisation stricte : dominance, classements, fear-greed (endpoints
+  # à faible coût en credits). On NE l'utilise PAS pour OHLCV haute
+  # fréquence — trop cher en credits.
+  coinmarketcap_api:
+    base_url: "https://pro-api.coinmarketcap.com/v1"
+    api_key: ${COINMARKETCAP_KEY}      # requise
+    endpoints:
+      global_metrics: "/global-metrics/quotes/latest"        # mcap totale, dominance
+      listings:       "/cryptocurrency/listings/latest"      # top 100 par mcap
+      fear_greed:     "/fear-and-greed/latest"               # index F&G crypto (signal régime)
+      quotes:         "/cryptocurrency/quotes/latest"        # snapshot prix (si ccxt KO)
+    poll_seconds:
+      global_metrics: 900
+      fear_greed:     3600
+      listings:       1800
+    tags: [crypto, aggregate, sentiment, regime_proxy]
+
+# ------------------------------------------------------------------
+# News — RSS gratuits + enrichissement Binance (crypto) + tedata (macro)
+# ------------------------------------------------------------------
+news:
+  rss:
+    - { url: https://feeds.reuters.com/reuters/businessNews, weight: 1.0, tags: [macro, general] }
+    - { url: https://www.coindesk.com/arc/outboundfeeds/rss/, weight: 1.0, tags: [crypto] }
+    - { url: https://www.theblock.co/rss.xml,                 weight: 0.9, tags: [crypto] }
+    - { url: https://www.investing.com/rss/news_1.rss,        weight: 0.8, tags: [macro, equity] }
+
+  apis:
+    newsapi: ${NEWSAPI_KEY}        # free tier 100 req/j — fallback enrichissement
+    finnhub: ${FINNHUB_KEY}        # free tier 60 req/min — news tagguées par ticker
+
+  # Binance comme source "crypto events" (annonces + funding + liquidations)
+  # Endpoints publics, sans clé API requise pour les données lues.
+  binance:
+    enabled: true
+    endpoints:
+      announcements:
+        url: "https://www.binance.com/bapi/composite/v1/public/cms/article/catalog/list/query"
+        # catalogId 48 = Listing | 49 = Delisting | 161 = Notices
+        poll_seconds: 60
+        tags: [crypto, listing, delisting, exchange]
+      funding_rate:
+        url: "https://fapi.binance.com/fapi/v1/premiumIndex"
+        poll_seconds: 300
+        use_as: signal
+        spike_threshold_abs: 0.01     # |funding| > 1 % sur 1h = anomalie
+      liquidations_24h:
+        url: "https://fapi.binance.com/futures/data/globalLongShortAccountRatio"
+        poll_seconds: 900
+        use_as: signal
+        spike_threshold_pct: 0.30     # ratio long/short déplacé de > 30 % en 15 min
+
+# ------------------------------------------------------------------
+# Macro / calendrier économique
+# ------------------------------------------------------------------
+# Trois couches :
+#   1. FRED (US, très frais)              — court terme, proche temps réel
+#   2. Trading Economics (intraday / API) — calendrier événements + news
+#   3. World Bank / OECD / Eurostat       — backfill long + contexte régime
+#
+# Les trois APIs institutionnelles (WB / OECD / Eurostat) ne servent
+# PAS au trading intraday : elles alimentent le HMM régime (§12) et la
+# page "contexte macro" du dashboard (§14.4). Leurs séries sont
+# majoritairement mensuelles/trimestrielles → polling quotidien suffit.
+# ------------------------------------------------------------------
+macro:
+  fred: ${FRED_API_KEY}
+
+  # Trading Economics — 2 modes :
+  #   api         : endpoint officiel, clé requise (free 500 req/j)
+  #   tedata_rss  : flux RSS news macro sans clé (moins riche, toujours utile)
+  tradingeconomics:
+    api_key: ${TRADINGECONOMICS_KEY}
+    endpoints:
+      calendar:    "https://api.tradingeconomics.com/calendar"
+      news:        "https://api.tradingeconomics.com/news"
+      indicators:  "https://api.tradingeconomics.com/indicators"
+    tedata_rss:
+      enabled: true
+      url: "https://tradingeconomics.com/ws/rss.ashx?i=news"
+      tags: [macro, analyst_commentary]
+
+  forex_factory_calendar: scrape
+
+  # World Bank Open Data — gratuit, pas de clé, pas de quota strict
+  # documenté (soft cap ~10 req/s). Séries annuelles/trimestrielles.
+  # Usage : PIB, inflation CPI, chômage, dette/PIB par pays → input HMM
+  # et mapping régime long terme.
+  world_bank:
+    base_url: "https://api.worldbank.org/v2"
+    format: json                    # "?format=json" à chaque requête
+    endpoints:
+      indicator_series: "/country/{country_code}/indicator/{indicator_code}"
+      countries:        "/country"
+      indicators_meta:  "/indicator"
+    refresh_cron: "0 5 * * *"       # 1 pull / jour à 05:00 UTC
+    indicators:                     # codes WB utilisés
+      gdp_constant:     "NY.GDP.MKTP.KD"
+      gdp_growth:       "NY.GDP.MKTP.KD.ZG"
+      inflation_cpi:    "FP.CPI.TOTL.ZG"
+      unemployment:     "SL.UEM.TOTL.ZS"
+      gov_debt_gdp:     "GC.DOD.TOTL.GD.ZS"
+    countries: [USA, EMU, CHN, JPN, GBR, DEU, FRA, CAN, AUS]
+    tags: [macro, long_term, regime]
+
+  # OECD Data API (SDMX) — gratuit, pas de clé. Plus frais que WB
+  # (mensuel pour CLI / Business Confidence / Composite Leading Indicators).
+  # Format : SDMX-JSON. Usage : leading indicators pour anticiper les
+  # bascules risk_on → risk_off.
+  oecd:
+    base_url: "https://sdmx.oecd.org/public/rest/data"
+    format: sdmx-json
+    endpoints:
+      dataflow: "/{agency},{dataflow_id},{version}/{key}"     # ex : OECD.SDD.STES,DSD_KEI@DF_KEI,4.0
+    datasets:
+      cli:                 "DSD_STES@DF_CLI"                  # Composite Leading Indicators
+      business_confidence: "DSD_STES@DF_BCI"
+      consumer_confidence: "DSD_STES@DF_CCI"
+      unemployment_rate:   "DSD_LFS@DF_IALFS_UNE_M"           # chômage mensuel
+    refresh_cron: "15 5 * * *"
+    countries: [USA, EA19, CHN, JPN, GBR, DEU, FRA, OECD]
+    tags: [macro, leading_indicator, regime]
+
+  # Eurostat — gratuit, pas de clé. Focus Europe (EA19 + UE27).
+  # Utilisé pour confirmer les signaux FRED sur le volet US avec le
+  # pendant européen (HICP, industrial production, sentiment économique).
+  eurostat:
+    base_url: "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data"
+    format: json
+    endpoints:
+      dataset: "/{dataset_code}"                              # ex : prc_hicp_manr
+    datasets:
+      hicp_inflation:      "prc_hicp_manr"                    # inflation annuelle HICP
+      industrial_prod:     "sts_inpr_m"                       # production industrielle mensuelle
+      unemployment:        "une_rt_m"                         # chômage mensuel EA19
+      economic_sentiment:  "ei_bsin_m_r2"                     # ESI
+      retail_trade:        "sts_trtu_m"
+    refresh_cron: "30 5 * * *"
+    tags: [macro, eurozone, regime]
+
+# ------------------------------------------------------------------
+# On-chain (utilisé comme confluence sur BTC / ETH)
+# ------------------------------------------------------------------
+onchain:
+  glassnode_free: true
+  dune_public: true
+
+# ------------------------------------------------------------------
+# Fallbacks & budgets (cf. §14.3 panel coûts & APIs)
+# ------------------------------------------------------------------
+fallback_policy:
+  on_timeout_ms:        3000
+  on_error_threshold:   0.10      # bascule source suivante si > 10 % erreur sur 1 h
+  quota_soft_pct:       0.80      # degraded orange si > 80 % quota utilisé
+  quota_hard_pct:       1.00      # cut-off rouge, fallback obligatoire
+
+daily_request_caps:
+  newsapi:          90            # garde-marge sous le quota 100/j
+  finnhub:          70000         # largement sous 60 req/min × 24h
+  tradingeconomics: 450           # free tier 500/j
+  coingecko_api:    2500          # ~30 req/min × pauses, Demo key 10k/mois
+  kraken_rest:      60000         # 1 req/s soft cap, large marge
+  coinmarketcap_api: 300          # 333 credits/j ≈ 10k/mois — usage agrégat seul
+  world_bank:       500           # pas de cap strict, on borne par prudence
+  oecd:             200
+  eurostat:         200

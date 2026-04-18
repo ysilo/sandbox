@@ -1,0 +1,66 @@
+# =============================================================================
+# systemd service — openclaw-trading-bot auto-update
+# -----------------------------------------------------------------------------
+# Invoqué par openclaw-auto-update.timer (pas manuellement en général).
+# Fait un `git fetch` et relance deploy.sh si un nouveau commit est dispo.
+#
+# Installation (en root sur le VPS) :
+#   sudo cp deploy/systemd/openclaw-auto-update.service /etc/systemd/system/
+#   sudo cp deploy/systemd/openclaw-auto-update.timer   /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now openclaw-auto-update.timer
+#
+# Vérification :
+#   systemctl status  openclaw-auto-update.timer
+#   systemctl list-timers openclaw-auto-update.timer
+#   journalctl -u openclaw-auto-update.service -n 50
+#
+# !!! Adapter User, WorkingDirectory et ExecStart au chemin réel du repo !!!
+# =============================================================================
+
+[Unit]
+Description=openclaw-trading-bot — auto-update (git pull + deploy)
+Documentation=file:/opt/openclaw-trading-bot/deploy/auto-update.sh
+# Ne pas bloquer le boot si le disque n'est pas prêt
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# User/Group : doit appartenir au groupe docker pour invoquer `docker compose`.
+# Ne PAS lancer en root sauf si strictement nécessaire — l'idéal est un user
+# dédié (ex. `deploy`) dans le groupe docker.
+User=deploy
+Group=docker
+WorkingDirectory=/opt/openclaw-trading-bot
+ExecStart=/opt/openclaw-trading-bot/deploy/auto-update.sh
+
+# Timeouts : deploy.sh peut prendre quelques minutes (build Docker). On cap
+# large pour ne pas tuer un build légitime, mais pas infini.
+TimeoutStartSec=20min
+
+# Limites ressources — on ne veut pas que le build Docker mange tout le CPU
+CPUQuota=150%
+MemoryMax=2G
+
+# Sécurité : lecture seule sauf le repo lui-même (git pull) et data/logs
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ReadWritePaths=/opt/openclaw-trading-bot
+# Docker socket nécessaire pour build + up
+BindReadOnlyPaths=/var/run/docker.sock
+
+# Journal stdout/stderr — complète le fichier data/logs/auto-update.log
+StandardOutput=journal
+StandardError=journal
+
+# En cas de crash du script, pas de restart automatique (le prochain tick
+# timer re-déclenchera le check)
+Restart=no
+
+[Install]
+# Pas d'install direct — ce service est déclenché par le timer
+WantedBy=multi-user.target

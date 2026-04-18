@@ -1,0 +1,10 @@
+# Copier vers config/mode.yaml.
+# -----------------------------------------------------------------------------
+# V1 = simulation uniquement. Seul `paper` est accepté — le bot refuse
+# de démarrer avec toute autre valeur. La bascule live est réservée V2
+# (ADR signée + 3 mois de paper avec Sharpe > 1, DD < 10 %, cf. §1 du
+# doc d'archi et CLAUDE.md règle infranchissable #1).
+# -----------------------------------------------------------------------------
+mode: paper
+signed_by: ""
+signed_at: ""

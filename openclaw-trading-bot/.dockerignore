@@ -1,0 +1,68 @@
+# -----------------------------------------------------------------------------
+# Contexte de build Docker — tout ce qui suit NE doit pas monter dans l'image.
+# -----------------------------------------------------------------------------
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Code archivé d'itérations précédentes — ne doit JAMAIS entrer dans l'image.
+_legacy/
+
+# Environnements virtuels / caches Python
+.venv
+venv
+env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.coverage
+.coverage.*
+htmlcov
+.mypy_cache
+.ruff_cache
+
+# Secrets — ne JAMAIS copier dans l'image (bake in = fuite)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Données runtime — le volume host prend le relais
+# (KILL vit désormais sous data/KILL — déjà ignoré via data/)
+data/
+!data/.gitkeep
+MEMORY.history/
+
+# IDE / OS
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist
+build
+*.egg-info
+
+# Tests & docs lourds — pas nécessaires dans l'image
+tests/
+docs/
+*.md
+!README.md
+
+# Docker lui-même
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Scripts locaux
+deploy.sh
+*.bak
+*.swp
+*.log

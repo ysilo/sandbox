@@ -1,0 +1,45 @@
+# config/telegram.yaml — Paramètres TelegramNotifier + webhook (§14.6)
+#
+# Secrets (jamais dans le YAML — lus depuis l'env) :
+#   - TELEGRAM_BOT_TOKEN
+#   - TELEGRAM_CHAT_ID         (cible par défaut des messages sortants)
+#   - TELEGRAM_WEBHOOK_SECRET  (X-Telegram-Bot-Api-Secret-Token)
+#
+# Les noms de variables d'env sont configurables ci-dessous pour permettre
+# un override en tests (ex: test_telegram_notifier → TELEGRAM_BOT_TOKEN_TEST).
+
+# Identifiant Telegram de l'opérateur admin — seul user_id autorisé à
+# exécuter les commandes mutables (/validate, /reject, /kill, /resume,
+# /rollback, /regime retrain). Les autres users reçoivent un message
+# `access_denied` et sont loggés en WARNING.
+admin_user_id: 0   # à remplir avec l'ID réel (int, pas un @username)
+
+# Base URL de l'API Telegram Bot (override possible en tests avec un stub local)
+api_base_url: "https://api.telegram.org"
+
+# Variables d'env portant les secrets
+env:
+  bot_token:      TELEGRAM_BOT_TOKEN
+  chat_id:        TELEGRAM_CHAT_ID
+  webhook_secret: TELEGRAM_WEBHOOK_SECRET
+
+# Formatage des messages sortants
+parse_mode: "MarkdownV2"          # "HTML" ou "MarkdownV2" (Telegram exige l'un des deux)
+disable_web_page_preview: true
+silent_alerts: false              # true → notifications Telegram silencieuses pour alert info/warning
+
+# Rate-limiting (protection simple — Telegram accepte ~30 msg/s par bot)
+rate_limit:
+  max_messages_per_second: 10
+  retry_on_429_seconds: 5
+
+# Paramètres des cartes de proposition (inline keyboard)
+proposal_card:
+  enable_details_button: true
+  expiration_minutes: 120         # après ce délai, les boutons sont désactivés
+                                  # (§14.6 — éviter les validations tardives)
+
+# Filtrage des alertes (§7.5.5)
+alerts:
+  min_level: "ERROR"              # ERROR, CRITICAL → Telegram ; WARNING → logs uniquement
+  deduplicate_window_s: 600       # même error_code dans les 10 min → pas de double ping

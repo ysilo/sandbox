@@ -1,0 +1,98 @@
+# =============================================================================
+# openclaw-trading-bot — docker-compose
+# -----------------------------------------------------------------------------
+# Un seul service = scheduler + FastAPI (dashboard) + webhook Telegram
+# regroupés. Mutualiser dans un container évite un deuxième port, un deuxième
+# process, et simplifie le deploy sur un VPS unique.
+#
+# Compose V2 (plugin `docker compose`) — pas de clé `version:` (obsolète).
+# Le projet est nommé explicitement pour que `docker compose ps / inspect`
+# fonctionne indépendamment du nom du dossier courant.
+# =============================================================================
+
+name: openclaw-trading-bot
+
+services:
+  trading-bot:
+    container_name: trading-bot
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        OPENCLAW_VERSION: "${OPENCLAW_VERSION:-latest}"
+        GIT_SHA: "${GIT_SHA:-nosha}"
+      # Image tagguée par le deploy.sh avec GIT_SHA — rollback facile
+      tags:
+        - "openclaw-trading-bot:${GIT_SHA:-latest}"
+        - "openclaw-trading-bot:v-${OPENCLAW_VERSION:-latest}"
+        - "openclaw-trading-bot:latest"
+    image: "openclaw-trading-bot:${GIT_SHA:-latest}"
+    # Ne JAMAIS tirer depuis un registry : l'image vit localement (build only)
+    pull_policy: never
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+      TZ: "UTC"
+      PORT: "8080"
+      DATA_DIR: "/app/data"
+      KILL_FILE_PATH: "/app/data/KILL"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      BOT_MODE: "${BOT_MODE:-simulation}"
+      OPENCLAW_VERSION: "${OPENCLAW_VERSION:-latest}"
+    volumes:
+      # Données persistantes — SQLite, Excel, Parquet, dashboards HTML générés.
+      # Le kill-switch KILL vit désormais sous data/ (data/KILL) → pas besoin
+      # de bind-mount fichier spécifique, Docker ne risque plus de créer un
+      # dossier à la place d'un fichier absent.
+      - ./data:/app/data
+      # Config en lecture seule — jamais modifiée par le container
+      - ./config:/app/config:ro
+    ports:
+      # Caddy tape le dashboard sur ce port (bot.mondomaine.com → 8080)
+      - "127.0.0.1:8080:8080"
+    networks:
+      - trading_net
+    # Limites ressources — sur VPS 2-4 Go, on cap le bot pour protéger l'hôte
+    mem_limit: 1024m
+    mem_reservation: 256m
+    cpus: 1.5
+    # Shutdown gracieux : APScheduler + SQLite WAL ont besoin de temps
+    stop_grace_period: 30s
+    stop_signal: SIGTERM
+    # Logs structurés, rotation pour éviter de remplir / sur le VPS
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    # Ulimits — APScheduler + FastAPI + ~8 clients HTTP async + SQLite WAL
+    # peuvent dépasser le 1024 fd par défaut sous charge.
+    ulimits:
+      nofile:
+        soft: 16384
+        hard: 65536
+    # Sécurité — filesystem racine read-only, writes autorisés uniquement via
+    # le volume ./data:/app/data (persistant) et les tmpfs ci-dessous (éphémères).
+    #   /tmp         : 64m suffisent (APScheduler locks, fichiers temp Python)
+    #   /app/.cache  : caches libs tierces (yfinance, requests_cache, etc.)
+    #   /app/.local  : platformdirs user_data_dir (click, rich configs)
+    #   /app/.config : platformdirs user_config_dir (idem)
+    # HOME=/app dans le Dockerfile → tous ces chemins sous ~bot, tmpfs requis
+    # à cause de read_only: true.
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /app/.cache:size=64m,mode=0700,uid=10001,gid=10001
+      - /app/.local:size=16m,mode=0700,uid=10001,gid=10001
+      - /app/.config:size=16m,mode=0700,uid=10001,gid=10001
+    # Healthcheck défini dans le Dockerfile — pas besoin de le redéfinir ici.
+
+networks:
+  trading_net:
+    # `external: false` → le premier deploy.sh crée le réseau.
+    # Passer à `external: true` une fois que OpenClaw le partage.
+    name: trading_net
+    driver: bridge

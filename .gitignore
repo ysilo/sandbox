@@ -1,0 +1,15 @@
+# Cowork / Claude Code internals
+.claude/
+/README.md
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+pytest-cache-files-*/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store

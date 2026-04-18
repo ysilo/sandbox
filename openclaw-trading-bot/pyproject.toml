@@ -1,0 +1,116 @@
+[build-system]
+# Backend simple, zéro runtime dep. Hatchling gère le src-layout sans conftest.
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openclaw-trading-bot"
+version = "0.1.0"
+description = "Autonomous multi-asset trading bot orchestrated by Claude Opus 4.7 on OpenClaw."
+requires-python = ">=3.11,<3.13"
+readme = "README.md"
+
+# ---------------------------------------------------------------------------
+# Dépendances runtime (source de vérité, remplace requirements.txt)
+# `requirements.txt` est désormais un artefact généré via `uv export` (§17.7).
+# ---------------------------------------------------------------------------
+dependencies = [
+    # Data / numerics
+    "ccxt>=4.3",
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "pyarrow>=16.0",
+    "statsmodels>=0.14",
+    "scikit-learn>=1.5",
+    "hmmlearn>=0.3",              # §12.2 — régime HMM
+
+    # HTTP / I/O
+    "requests>=2.32",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+    "PyYAML>=6.0",
+    "beautifulsoup4>=4.12",       # §7.2.1 — scraping Boursorama fallback
+    "lxml>=5.2",                  # parser bs4 rapide
+
+    # Scheduling + webapp (§14.5 / §14.6)
+    "apscheduler>=3.10",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
+
+    # Telegram (§14.6)
+    "python-telegram-bot>=21.0",
+
+    # Persistance fichiers
+    "sqlite-utils>=3.36",         # §10
+    "openpyxl>=3.1",              # §9.2
+
+    # Viz / rendu
+    "matplotlib>=3.9",
+    "plotly>=5.22",
+
+    # Similarité / recherche mémoire (§10.4)
+    "faiss-cpu>=1.8",
+    "fastembed>=0.3",             # embeddings ONNX CPU
+
+    # Logs / confort
+    "rich>=13.7",
+    "loguru>=0.7",
+    "pydantic>=2.7",              # §8.8.1 — contrats skills
+    "anthropic>=0.34",            # SDK Claude
+]
+
+# ---------------------------------------------------------------------------
+# Dependency groups (PEP 735) — consommés via `uv sync --group dev`
+# ---------------------------------------------------------------------------
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "pytest-cov>=5.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "types-PyYAML",
+    "types-requests",
+]
+
+# ---------------------------------------------------------------------------
+# uv — configuration build / index
+# ---------------------------------------------------------------------------
+[tool.uv]
+# Évite la compilation native en local / CI : wheels only si disponibles.
+# `faiss-cpu` et `hmmlearn` publient des wheels linux/macos — pas de problème.
+prerelease = "disallow"
+compile-bytecode = true          # compile .pyc à l'install (gain cold-start)
+managed = true
+
+[tool.uv.sources]
+# Place à des overrides futurs (git pinning, index privé) sans toucher
+# aux entrées `dependencies`.
+
+# ---------------------------------------------------------------------------
+# Hatchling — dit au builder où est le code source.
+# L'arborescence de §3 importe en `from src.<mod>.<pkg>` : le package est `src`.
+# ---------------------------------------------------------------------------
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+addopts = "-ra -q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "TCH"]
+ignore = ["E501"]                # line-length déjà géré par formatter
+
+[tool.mypy]
+python_version = "3.11"
+strict = false                   # on durcira par module après stabilisation
+warn_unused_ignores = true
+ignore_missing_imports = true

@@ -1,0 +1,46 @@
+# =============================================================================
+# config/risk.yaml — garde-fous déterministes du bot (§2.3, §11)
+# =============================================================================
+
+# --- Taille & exposition ------------------------------------------------------
+max_risk_per_trade_pct_equity: 0.75
+max_daily_loss_pct_equity: 2.0
+max_open_positions: 8
+max_exposure_per_asset_class_pct: 40
+min_rr: 1.8
+max_correlated_positions: 3
+correlation_window_days: 30
+max_correlation_threshold: 0.70
+
+# --- Kill-switch (§11.1) ------------------------------------------------------
+# Chemin du fichier sentinelle résolu relativement à la racine du repo
+# (= /app dans le container). En prod : /app/data/KILL. `touch data/KILL`
+# depuis l'hôte gèle toute proposition au prochain cycle.
+kill_switch_file: data/KILL
+
+# --- Budget LLM & coûts (§2.3) ------------------------------------------------
+# Consommés par src/risk/budget_gate.py et reportés dans le dashboard (§14.3).
+llm:
+  max_daily_tokens: 50000
+  max_monthly_cost_usd: 15.0
+  model: claude-sonnet-4-6            # cycles automatiques
+  opus_reserved_for:
+    - self_improve_weekly             # réflexion méta hebdo
+    - architecture_review_monthly     # revue d'architecture mensuelle
+
+# --- Fenêtres d'évitement macro (§11.2) ---------------------------------------
+# offset_min = [avant, après] en minutes autour de l'événement.
+# Valeurs alignées sur le doc (conservatrices) — toute modification doit
+# être répercutée en §11.2 du TRADING_BOT_ARCHITECTURE.md.
+avoid_windows:
+  - {name: fomc,                 offset_min: [-45, 60]}
+  - {name: cpi_us,               offset_min: [-30, 45]}
+  - {name: nfp,                  offset_min: [-30, 45]}
+  - {name: ecb_meeting,          offset_min: [-30, 45]}
+  # Fenêtre spécifique crypto (weekly close dimanche 00:00 UTC) — décidée
+  # par l'équipe, ajoutée au doc en §11.2 lors du round 5.
+  - {name: weekly_close_crypto_sunday, offset_min: [-60, 60]}
+
+# --- Coûts d'exécution simulée (§9.3) ----------------------------------------
+slippage_bps_default: 3
+fee_bps_default: 7

@@ -1,0 +1,124 @@
+# ==================================================================
+# Univers d'actifs suivis — V1
+# ------------------------------------------------------------------
+# Trois principes :
+#   1. Resserrer pour limiter les tokens LLM (coût scan + narrative).
+#   2. Concentrer sur les actifs où Ichimoku + volume sont lisibles.
+#   3. Garder les benchmarks macro pour alimenter le régime HMM.
+#
+# Champs par actif :
+#   priority      A = prioritaire, B = complément, C = watchlist seul
+#   active_hours  fenêtre UTC où l'actif est scanné (hors = skip)
+#   min_adv_usd   average daily volume minimum exigé par le fetcher
+#   tags          pour le news_driven_momentum (§6.7) et les risk checks
+#
+# Budgets d'exposition (voir §11.2 risk.yaml pour cohérence) :
+#   forex  : 35 %  (liquidité excellente, sessions continues)
+#   crypto : 25 %  (volatilité → size réduite, 24/7)
+#   equity : 40 %  (plus d'opportunités sur un univers plus large)
+# ==================================================================
+
+class_budgets_pct:
+  forex:  35
+  crypto: 25
+  equity: 40
+
+max_assets_scanned_per_cycle: 20   # cf. MarketScanner.scan(top_n=20)
+max_open_per_class:                # aligné sur risk.yaml
+  forex:  3
+  crypto: 3
+  equity: 4
+
+# ------------------------------------------------------------------
+# Forex — 8 paires (réduction vs V0 : -2)
+# On retire AUDJPY (carry peu lisible hors régime risk_on fort) et
+# NZDUSD (faible différenciation avec AUDUSD, même driver risk).
+# ------------------------------------------------------------------
+forex:
+  majors:
+    - { symbol: EURUSD, priority: A, active_hours: "06-21", tags: [eur, usd, risk_proxy] }
+    - { symbol: USDJPY, priority: A, active_hours: "00-22", tags: [usd, jpy, risk_haven] }
+    - { symbol: GBPUSD, priority: A, active_hours: "07-21", tags: [gbp, usd] }
+    - { symbol: USDCHF, priority: B, active_hours: "06-21", tags: [usd, chf, risk_haven] }
+    - { symbol: AUDUSD, priority: B, active_hours: "22-08", tags: [aud, usd, commodity_proxy] }
+    - { symbol: USDCAD, priority: B, active_hours: "12-21", tags: [usd, cad, oil_proxy] }
+  minors:
+    - { symbol: EURJPY, priority: B, active_hours: "06-22", tags: [eur, jpy] }
+    - { symbol: EURGBP, priority: C, active_hours: "07-17", tags: [eur, gbp] }
+
+# ------------------------------------------------------------------
+# Crypto — 8 paires (réduction vs V0 : -2)
+# On retire ADA et DOGE (liquidité OK mais narrative news faible,
+# souvent bruit). TON gardé pour exposition narrative Telegram.
+# ------------------------------------------------------------------
+crypto:
+  top:
+    - { symbol: BTC/USDT, priority: A, active_hours: "24/7", tags: [btc, macro_proxy, risk_benchmark] }
+    - { symbol: ETH/USDT, priority: A, active_hours: "24/7", tags: [eth, l1, defi_proxy] }
+    - { symbol: SOL/USDT, priority: A, active_hours: "24/7", tags: [sol, l1, high_beta] }
+    - { symbol: BNB/USDT, priority: B, active_hours: "24/7", tags: [bnb, exchange_risk] }
+    - { symbol: XRP/USDT, priority: B, active_hours: "24/7", tags: [xrp, regulatory] }
+    - { symbol: AVAX/USDT, priority: B, active_hours: "24/7", tags: [avax, l1] }
+    - { symbol: LINK/USDT, priority: B, active_hours: "24/7", tags: [link, oracle, defi_proxy] }
+    - { symbol: TON/USDT, priority: C, active_hours: "24/7", tags: [ton, narrative] }
+  venues: [binance, kraken, bybit]
+
+# ------------------------------------------------------------------
+# Actions & ETF — 22 tickers (réduction vs V0 : -8)
+# On retire : DIA (redondant avec SPY), NFLX et COST (drivers idiosyncratiques
+# moins news-visibles), XLRE XLU XLB (sectoriels faible liquidité news),
+# ENEL.MI (faible couverture news anglophone).
+# ------------------------------------------------------------------
+equities:
+  indices:
+    - { symbol: SPY,  priority: A, active_hours: "13-20", tags: [us_equity, risk_benchmark] }
+    - { symbol: QQQ,  priority: A, active_hours: "13-20", tags: [us_tech, high_beta] }
+    - { symbol: IWM,  priority: B, active_hours: "13-20", tags: [us_small_cap, risk_proxy] }
+
+  us_large_cap:
+    - { symbol: AAPL,  priority: A, active_hours: "13-20", tags: [tech, earnings_watch] }
+    - { symbol: MSFT,  priority: A, active_hours: "13-20", tags: [tech, cloud] }
+    - { symbol: NVDA,  priority: A, active_hours: "13-20", tags: [tech, ai_narrative, high_beta] }
+    - { symbol: GOOGL, priority: A, active_hours: "13-20", tags: [tech, ads, ai_narrative] }
+    - { symbol: AMZN,  priority: B, active_hours: "13-20", tags: [tech, retail, cloud] }
+    - { symbol: META,  priority: B, active_hours: "13-20", tags: [tech, ads, ai_narrative] }
+    - { symbol: TSLA,  priority: B, active_hours: "13-20", tags: [auto, ev, high_beta, headline_risk] }
+    - { symbol: AMD,   priority: B, active_hours: "13-20", tags: [tech, semiconductors, ai_narrative] }
+
+  us_sectors:
+    - { symbol: XLK, priority: B, active_hours: "13-20", tags: [sector_tech] }
+    - { symbol: XLV, priority: B, active_hours: "13-20", tags: [sector_health] }
+    - { symbol: XLF, priority: B, active_hours: "13-20", tags: [sector_financials, rates_sensitive] }
+    - { symbol: XLE, priority: B, active_hours: "13-20", tags: [sector_energy, oil_sensitive] }
+    - { symbol: XLY, priority: C, active_hours: "13-20", tags: [sector_cons_disc, consumer_health] }
+    - { symbol: XLP, priority: C, active_hours: "13-20", tags: [sector_cons_staples, defensive] }
+    - { symbol: XLI, priority: C, active_hours: "13-20", tags: [sector_industrials] }
+    - { symbol: XLC, priority: C, active_hours: "13-20", tags: [sector_communications, ai_narrative] }
+
+  eu:
+    - { symbol: ASML.AS, priority: B, active_hours: "07-15", tags: [tech, semiconductors, export_china] }
+    - { symbol: SAP.DE,  priority: B, active_hours: "07-15", tags: [tech, cloud] }
+    - { symbol: LVMH.PA, priority: B, active_hours: "07-15", tags: [luxury, china_demand] }
+    - { symbol: AIR.PA,  priority: C, active_hours: "07-15", tags: [aerospace] }
+
+# ------------------------------------------------------------------
+# Benchmarks (pas tradés — alimentent le régime HMM et le dashboard)
+# ------------------------------------------------------------------
+benchmarks:
+  - { symbol: SPY,      role: "equity_us_proxy" }
+  - { symbol: BTC/USDT, role: "crypto_risk_proxy" }
+  - { symbol: DXY,      role: "usd_strength" }
+  - { symbol: ^VIX,     role: "equity_vol" }
+  - { symbol: ^TNX,     role: "us_10y_yield" }
+  - { symbol: CL=F,     role: "oil_brent_proxy" }   # ajout V1.1 — driver XLE / USDCAD
+  - { symbol: GC=F,     role: "gold_safe_haven" }   # ajout V1.1 — driver régime risk_off
+
+# ------------------------------------------------------------------
+# Ordre de priorité pour le scanner :
+#   1. Actifs A dont active_hours couvre l'heure du cycle
+#   2. Actifs B dont active_hours couvre l'heure du cycle
+#   3. Actifs C seulement si un hit news/event les force
+# Avec ces règles, un cycle "pre_europe" (07:00 UTC) scanne ~15 actifs
+# et un cycle "post_us" (21:00 UTC) scanne ~14 actifs — bien sous le
+# plafond de 20 et donc sous le budget tokens journalier (§2.3).
+# ------------------------------------------------------------------
