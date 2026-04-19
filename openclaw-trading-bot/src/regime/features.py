@@ -27,7 +27,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Iterable, Optional, Protocol
 
 import numpy as np
@@ -228,7 +228,7 @@ def build_features(
     Buffer = 25 jours (cf. code de référence §12.2.4).
     """
     cfg = config or FeatureSourceConfig()
-    today = today or datetime.utcnow().date()
+    today = today or datetime.now(timezone.utc).date()
     fetch_days = window_days + 25
 
     sources_used: dict[str, str] = {}
