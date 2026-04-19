@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.7
 # ==============================================================================
 # openclaw-trading-bot — image unique (scheduler + API + webhook Telegram)
 # ------------------------------------------------------------------------------
@@ -11,6 +10,11 @@
 #   --build-arg OPENCLAW_VERSION=<tag>   (défaut: latest)
 #       Tag logique de la release OpenClaw embarqué dans l'image (LABEL + ENV).
 #       Indépendant du SHA git utilisé comme tag Docker.
+#
+# Note : on s'appuie sur le frontend BuildKit bundled (pas de `# syntax=...`)
+# pour éviter un pull de `docker.io/docker/dockerfile` au build — le frontend
+# interne supporte déjà `--mount=type=cache` utilisé plus bas. BuildKit reste
+# requis (activé par défaut sur Docker Desktop ≥ 20.10 / Engine ≥ 23).
 #
 # Voir §17.5 + §17.7 du doc d'archi pour la rationale du choix de `uv`.
 # ==============================================================================
